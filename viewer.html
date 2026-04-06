@@ -4,55 +4,59 @@
     <title>Draw.io Notion Connector</title>
     <style>
         body, html, iframe { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; background: #ffffff; }
-        #status { position: fixed; top: 10px; left: 10px; font-family: sans-serif; font-size: 12px; color: #888; z-index: 10; background: rgba(255,255,255,0.7); padding: 4px; }
+        #status { position: fixed; top: 10px; left: 10px; font-family: sans-serif; font-size: 12px; color: #888; z-index: 10; background: rgba(255,255,255,0.7); padding: 4px; border-radius: 4px; }
     </style>
 </head>
 <body>
-    <div id="status">システム起動中...</div>
-    <iframe id="drawio-frame" src="https://viewer.diagrams.net/?embed=1&proto=json&spin=1&url=https://raw.githubusercontent.com/matsumoto-h-spec/viewer/refs/heads/main/index.xml"></iframe>
+    <div id="status">図面を準備中...</div>
+    <iframe id="drawio-frame" src="https://raw.githubusercontent.com/matsumoto-h-spec/viewer/main/index.xml"></iframe>
 
     <script>
         const iframe = document.getElementById('drawio-frame');
         const status = document.getElementById('status');
         
         const urlParams = new URLSearchParams(window.location.search);
-        // URLの ?room=XXX を取得
         const roomName = decodeURIComponent(urlParams.get('room') || '');
+        
+        // 正確なRaw URLを指定
         const xmlUrl = 'https://raw.githubusercontent.com/matsumoto-h-spec/viewer/main/index.xml';
 
         window.addEventListener('message', async function(evt) {
             if (evt.data.length < 1) return;
             const data = JSON.parse(evt.data);
 
-            // 1. Draw.ioのシステムが立ち上がった
+            // 1. Draw.io起動
             if (data.event === 'init') {
-                status.innerText = "図面データを取得しています...";
-                const response = await fetch(xmlUrl);
-                const xmlText = await response.text();
+                status.innerText = "データを取得中...";
+                try {
+                    const response = await fetch(xmlUrl);
+                    const xmlText = await response.text();
 
-                // 図面を流し込む
-                iframe.contentWindow.postMessage(JSON.stringify({
-                    action: 'load', xml: xmlText
-                }), '*');
+                    // プログラムから図面を流し込む
+                    iframe.contentWindow.postMessage(JSON.stringify({
+                        action: 'load', xml: xmlText
+                    }), '*');
+                } catch (e) {
+                    status.innerText = "エラー：図面の取得に失敗";
+                }
             }
 
-            // 2. 図面の描画が「完全に完了」したタイミングでズームを実行
+            // 2. 図面描画完了後にズーム実行
             if (data.event === 'render' && roomName) {
-                status.innerText = roomName + " を選択してズームします...";
+                status.innerText = roomName + " へズームします...";
                 
-                // 描画直後は不安定なため、0.5秒だけ待ってから確実に実行
                 setTimeout(() => {
-                    // 【重要】まず選択する（select）
+                    // 選択
                     iframe.contentWindow.postMessage(JSON.stringify({
                         action: 'select',
-                        tags: [roomName] // Pythonで設定した tags を優先使用
+                        tags: [roomName]
                     }), '*');
 
-                    // 【重要】次にそこへズームする（scroll）
+                    // ズーム
                     iframe.contentWindow.postMessage(JSON.stringify({
                         action: 'scroll',
                         tags: [roomName],
-                        padding: 100 // ズームの近さ（数字が小さいほど寄る）
+                        padding: 100
                     }), '*');
 
                     status.style.display = 'none';
