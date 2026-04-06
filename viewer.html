@@ -18,7 +18,7 @@
         const urlParams = new URLSearchParams(window.location.search);
         // URLの?room=◯◯を取得（空なら何もしない）
         const roomName = decodeURIComponent(urlParams.get('room') || '');
-        const xmlUrl = 'https://raw.githubusercontent.com/matsumoto-h-spec/viewer/main/index.xml';
+        const xmlUrl = 'https://raw.githubusercontent.com/matsumoto-h-spec/viewer/refs/heads/main/index.xml';
 
         window.addEventListener('message', async function(evt) {
             if (evt.data.length < 1) return;
