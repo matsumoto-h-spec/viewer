@@ -4,11 +4,11 @@
     <title>Draw.io Notion Connector</title>
     <style>
         body, html, iframe { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; background: #f5f5f5; }
-        #msg { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: sans-serif; color: #666; }
+        #msg { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: sans-serif; color: #666; font-size: 14px; text-align: center; }
     </style>
 </head>
 <body>
-    <div id="msg">図面を読み込んでいます...</div>
+    <div id="msg">図面データを読み込んでいます...</div>
     <iframe id="drawio-frame" src="https://viewer.diagrams.net/?embed=1&proto=json&spin=1"></iframe>
 
     <script>
@@ -17,47 +17,51 @@
         
         const urlParams = new URLSearchParams(window.location.search);
         const roomName = urlParams.get('room');
-        // あなたのGitHub上のXMLのURL（Raw URL）
+        // あなたのGitHubのRaw URL
         const xmlUrl = 'https://raw.githubusercontent.com/matsumoto-h-spec/viewer/refs/heads/main/index.xml';
 
         window.addEventListener('message', async function(evt) {
             if (evt.data.length < 1) return;
             const data = JSON.parse(evt.data);
 
-            // 1. Draw.ioの準備ができたら(init)
+            // 1. Draw.ioが起動完了（init）したとき
             if (data.event === 'init') {
-                msg.innerText = "データを転送中...";
-                
                 try {
-                    // 2. 自力でGitHubからXMLをダウンロードする
+                    // 2. GitHubからXMLファイルを自力で取得
                     const response = await fetch(xmlUrl);
                     const xmlText = await response.text();
 
-                    // 3. ダウンロードしたXMLをDraw.ioに「これ表示して」と渡す(load)
+                    // 3. Draw.ioに「この図面を表示して」と命令(load)
                     iframe.contentWindow.postMessage(JSON.stringify({
                         action: 'load',
                         xml: xmlText
                     }), '*');
 
-                    // 4. 表示が終わったらズームと選択を実行
+                    // 4. 部屋名の指定があれば、ズームと選択を実行
                     if (roomName) {
-                        // 少しだけ描画待ちの時間を置く（0.5秒）
+                        msg.innerText = roomName + " を探しています...";
+                        // 描画が安定するまで少し待機（800ms）
                         setTimeout(() => {
+                            // ズーム（直接アクションを送ります）
+                            iframe.contentWindow.postMessage(JSON.stringify({
+                                action: 'scroll', 
+                                label: roomName, 
+                                padding: 150 
+                            }), '*');
+
+                            // 選択（青枠表示）
+                            iframe.contentWindow.postMessage(JSON.stringify({
+                                action: 'select', 
+                                label: roomName 
+                            }), '*');
+                            
                             msg.style.display = 'none';
-                            // ズーム
-                            iframe.contentWindow.postMessage(JSON.stringify({
-                                action: 'post',
-                                message: { action: 'scroll', label: roomName, padding: 150 }
-                            }), '*');
-                            // 選択
-                            iframe.contentWindow.postMessage(JSON.stringify({
-                                action: 'post',
-                                message: { action: 'select', label: roomName }
-                            }), '*');
-                        }, 500);
+                        }, 800);
+                    } else {
+                        msg.style.display = 'none';
                     }
                 } catch (e) {
-                    msg.innerText = "エラーが発生しました。URLを確認してください。";
+                    msg.innerText = "エラー：図面データの取得に失敗しました。";
                     console.error(e);
                 }
             }
