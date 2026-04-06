@@ -3,67 +3,60 @@
 <head>
     <title>Draw.io Notion Connector</title>
     <style>
-        body, html, iframe { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; background: #f5f5f5; }
-        #msg { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: sans-serif; color: #666; font-size: 14px; text-align: center; }
+        body, html, iframe { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; background: #ffffff; }
+        #status { position: fixed; top: 10px; left: 10px; font-family: sans-serif; font-size: 12px; color: #888; z-index: 10; background: rgba(255,255,255,0.7); padding: 4px; }
     </style>
 </head>
 <body>
-    <div id="msg">図面データを読み込んでいます...</div>
+    <div id="status">システム起動中...</div>
     <iframe id="drawio-frame" src="https://viewer.diagrams.net/?embed=1&proto=json&spin=1"></iframe>
 
     <script>
         const iframe = document.getElementById('drawio-frame');
-        const msg = document.getElementById('msg');
+        const status = document.getElementById('status');
         
         const urlParams = new URLSearchParams(window.location.search);
-        const roomName = urlParams.get('room');
-        // あなたのGitHubのRaw URL
-        const xmlUrl = 'https://raw.githubusercontent.com/matsumoto-h-spec/viewer/refs/heads/main/index.xml';
+        // URLの ?room=XXX を取得
+        const roomName = decodeURIComponent(urlParams.get('room') || '');
+        const xmlUrl = 'https://raw.githubusercontent.com/matsumoto-h-spec/viewer/main/index.xml';
 
         window.addEventListener('message', async function(evt) {
             if (evt.data.length < 1) return;
             const data = JSON.parse(evt.data);
 
-            // 1. Draw.ioが起動完了（init）したとき
+            // 1. Draw.ioのシステムが立ち上がった
             if (data.event === 'init') {
-                try {
-                    // 2. GitHubからXMLファイルを自力で取得
-                    const response = await fetch(xmlUrl);
-                    const xmlText = await response.text();
+                status.innerText = "図面データを取得しています...";
+                const response = await fetch(xmlUrl);
+                const xmlText = await response.text();
 
-                    // 3. Draw.ioに「この図面を表示して」と命令(load)
+                // 図面を流し込む
+                iframe.contentWindow.postMessage(JSON.stringify({
+                    action: 'load', xml: xmlText
+                }), '*');
+            }
+
+            // 2. 図面の描画が「完全に完了」したタイミングでズームを実行
+            if (data.event === 'render' && roomName) {
+                status.innerText = roomName + " を選択してズームします...";
+                
+                // 描画直後は不安定なため、0.5秒だけ待ってから確実に実行
+                setTimeout(() => {
+                    // 【重要】まず選択する（select）
                     iframe.contentWindow.postMessage(JSON.stringify({
-                        action: 'load',
-                        xml: xmlText
+                        action: 'select',
+                        tags: [roomName] // Pythonで設定した tags を優先使用
                     }), '*');
 
-                    // 4. 部屋名の指定があれば、ズームと選択を実行
-                    if (roomName) {
-                        msg.innerText = roomName + " を探しています...";
-                        // 描画が安定するまで少し待機（800ms）
-                        setTimeout(() => {
-                            // ズーム（直接アクションを送ります）
-                            iframe.contentWindow.postMessage(JSON.stringify({
-                                action: 'scroll', 
-                                label: roomName, 
-                                padding: 150 
-                            }), '*');
+                    // 【重要】次にそこへズームする（scroll）
+                    iframe.contentWindow.postMessage(JSON.stringify({
+                        action: 'scroll',
+                        tags: [roomName],
+                        padding: 100 // ズームの近さ（数字が小さいほど寄る）
+                    }), '*');
 
-                            // 選択（青枠表示）
-                            iframe.contentWindow.postMessage(JSON.stringify({
-                                action: 'select', 
-                                label: roomName 
-                            }), '*');
-                            
-                            msg.style.display = 'none';
-                        }, 800);
-                    } else {
-                        msg.style.display = 'none';
-                    }
-                } catch (e) {
-                    msg.innerText = "エラー：図面データの取得に失敗しました。";
-                    console.error(e);
-                }
+                    status.style.display = 'none';
+                }, 500);
             }
         });
     </script>
