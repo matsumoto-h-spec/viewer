@@ -16,48 +16,51 @@
         const status = document.getElementById('status');
         
         const urlParams = new URLSearchParams(window.location.search);
+        // URLの?room=◯◯を取得（空なら何もしない）
         const roomName = decodeURIComponent(urlParams.get('room') || '');
-        
-        // あなたの図面データの本当の住所
         const xmlUrl = 'https://raw.githubusercontent.com/matsumoto-h-spec/viewer/main/index.xml';
 
         window.addEventListener('message', async function(evt) {
             if (evt.data.length < 1) return;
             const data = JSON.parse(evt.data);
 
-            // 1. Draw.ioアプリが起動したとき
             if (data.event === 'init') {
                 status.innerText = "図面を読み込んでいます...";
                 try {
-                    // GitHubからデータを取ってくる
                     const response = await fetch(xmlUrl);
-                    if (!response.ok) throw new Error('ファイルが見つかりません');
                     const xmlText = await response.text();
-
-                    // アプリに図面を渡す
-                    iframe.contentWindow.postMessage(JSON.stringify({
-                        action: 'load', xml: xmlText
-                    }), '*');
+                    iframe.contentWindow.postMessage(JSON.stringify({ action: 'load', xml: xmlText }), '*');
                 } catch (e) {
-                    status.innerText = "エラー：図面の取得に失敗（URLが違うか、リポジトリが非公開です）";
-                    status.style.color = "red";
+                    status.innerText = "エラー：図面が見つかりません";
                 }
             }
 
-            // 2. 図面の描画が終わったらズーム
+            // 図面が表示された（render）タイミングで実行
             if (data.event === 'render' && roomName) {
-                status.innerText = roomName + " へ移動します...";
+                status.innerText = roomName + " を検索中...";
+                
                 setTimeout(() => {
-                    // 選択
+                    // 【修正ポイント】tags と label の両方で検索をかける
+                    const searchCommand = {
+                        tags: [roomName],
+                        label: roomName
+                    };
+
+                    // 1. 選択（青枠）
                     iframe.contentWindow.postMessage(JSON.stringify({
-                        action: 'select', tags: [roomName]
+                        action: 'select',
+                        ...searchCommand
                     }), '*');
-                    // ズーム
+
+                    // 2. ズーム
                     iframe.contentWindow.postMessage(JSON.stringify({
-                        action: 'scroll', tags: [roomName], padding: 100
+                        action: 'scroll',
+                        ...searchCommand,
+                        padding: 150
                     }), '*');
+
                     status.style.display = 'none';
-                }, 500);
+                }, 1000); // 140個あるので1秒待つのが安全
             }
         });
     </script>
