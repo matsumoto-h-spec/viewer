@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Draw.io Notion Connector</title>
+    <style>
+        body, html, iframe { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
+    </style>
+</head>
+<body>
+    <iframe id="drawio-frame" src="https://viewer.diagrams.net/?embed=1&proto=json&spin=1"></iframe>
+
+    <script>
+        const iframe = document.getElementById('drawio-frame');
+        
+        // 1. URLパラメータから室名（IDやタグ）を取得 (?room=授乳室2)
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomName = urlParams.get('room');
+
+        // 2. Draw.ioからのメッセージを受け取る準備
+        window.addEventListener('message', function(evt) {
+            if (evt.data.length < 1) return;
+            const data = JSON.parse(evt.data);
+
+            // Draw.ioの読み込みが完了（init）した瞬間に実行
+            if (data.event === 'init' && roomName) {
+                
+                // 【重要】ズームと選択の命令を送る
+                // 140個あるため、まず該当の場所へスクロール（ズーム）
+                iframe.contentWindow.postMessage(JSON.stringify({
+                    action: 'post',
+                    message: {
+                        action: 'scroll',
+                        label: roomName, // XMLで設定したタグやラベル
+                        padding: 150     // ズーム時の余白（お好みで調整）
+                    }
+                }), '*');
+
+                // 続いて、その対象を選択状態（青枠）にする
+                iframe.contentWindow.postMessage(JSON.stringify({
+                    action: 'post',
+                    message: {
+                        action: 'select',
+                        label: roomName
+                    }
+                }), '*');
+            }
+        });
+    </script>
+</body>
+</html>
