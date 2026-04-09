@@ -1,68 +1,62 @@
 <!DOCTYPE html>
-<html>
+<html lang="ja">
 <head>
-    <title>Draw.io Notion Connector</title>
-    <style>
-        body, html, iframe { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; background: #ffffff; }
-        #status { position: fixed; top: 10px; left: 10px; font-family: sans-serif; font-size: 12px; color: #888; z-index: 10; background: rgba(255,255,255,0.7); padding: 4px; border-radius: 4px; }
-    </style>
+  <meta charset="UTF-8">
+  <title>Floor Viewer</title>
+  <style>
+    body { margin: 0; }
+    iframe { width: 100vw; height: 100vh; border: none; }
+  </style>
 </head>
 <body>
-    <div id="status">準備中...</div>
-    <iframe id="drawio-frame" src="https://viewer.diagrams.net/?embed=1&proto=json&spin=1"></iframe>
+<iframe id="drawio" src=""></iframe>
 
-    <script>
-        const iframe = document.getElementById('drawio-frame');
-        const status = document.getElementById('status');
-        
-        const urlParams = new URLSearchParams(window.location.search);
-        // URLの?room=◯◯を取得（空なら何もしない）
-        const roomName = decodeURIComponent(urlParams.get('room') || '');
-        const xmlUrl = 'https://raw.githubusercontent.com/matsumoto-h-spec/viewer/refs/heads/main/index.xml';
+<script>
+  const params = new URLSearchParams(location.search);
+  const roomName = params.get('room'); // 例: "会議室A"
 
-        window.addEventListener('message', async function(evt) {
-            if (evt.data.length < 1) return;
-            const data = JSON.parse(evt.data);
+  // ① draw.ioにdiagram.xmlを読み込ませる
+  const diagramUrl = encodeURIComponent(
+    'https://matsumoto-h-spec.github.io/index/diagram.xml'
+  );
+  document.getElementById('drawio').src =
+    `https://embed.diagrams.net/?url=${diagramUrl}&ui=min&toolbar=0`;
 
-            if (data.event === 'init') {
-                status.innerText = "図面を読み込んでいます...";
-                try {
-                    const response = await fetch(xmlUrl);
-                    const xmlText = await response.text();
-                    iframe.contentWindow.postMessage(JSON.stringify({ action: 'load', xml: xmlText }), '*');
-                } catch (e) {
-                    status.innerText = "エラー：図面が見つかりません";
-                }
-            }
+  // ② iframeの準備完了後に部屋を選択・ズーム
+  window.addEventListener('message', (e) => {
+    if (e.data === 'ready' || e.data?.event === 'init') {
+      selectRoom(roomName);
+    }
+  });
 
-            // 図面が表示された（render）タイミングで実行
-            if (data.event === 'render' && roomName) {
-                status.innerText = roomName + " を検索中...";
-                
-                setTimeout(() => {
-                    // 【修正ポイント】tags と label の両方で検索をかける
-                    const searchCommand = {
-                        tags: [roomName],
-                        label: roomName
-                    };
+  function selectRoom(name) {
+    const iframe = document.getElementById('drawio');
 
-                    // 1. 選択（青枠）
-                    iframe.contentWindow.postMessage(JSON.stringify({
-                        action: 'select',
-                        ...searchCommand
-                    }), '*');
+    // XMLをfetchして部屋名に一致するcell IDを探す
+    fetch('./diagram.xml')
+      .then(r => r.text())
+      .then(xml => {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(xml, 'text/xml');
+        const cells = doc.querySelectorAll('mxCell');
+        let targetId = null;
 
-                    // 2. ズーム
-                    iframe.contentWindow.postMessage(JSON.stringify({
-                        action: 'scroll',
-                        ...searchCommand,
-                        padding: 150
-                    }), '*');
-
-                    status.style.display = 'none';
-                }, 1000); // 140個あるので1秒待つのが安全
-            }
+        cells.forEach(cell => {
+          if (cell.getAttribute('value') === name) {
+            targetId = cell.getAttribute('id');
+          }
         });
-    </script>
+
+        if (!targetId) return;
+
+        // ③ postMessageで選択 → ズーム
+        iframe.contentWindow.postMessage(
+          JSON.stringify({ action: 'select', cells: [targetId] }),
+          '*'
+        );
+        // ズームはscrollToPageで代替 or カスタム実装
+      });
+  }
+</script>
 </body>
 </html>
